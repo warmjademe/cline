@@ -3,13 +3,15 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { MessageWithMetadata } from "@cline/llms";
-import type {
-	AgentConfig,
-	AgentEvent,
-	AgentExtensionAutomationContext,
-	AgentResult,
-	AgentRuntimeEvent,
-	BasicLogger,
+import {
+	type AgentConfig,
+	type AgentEvent,
+	type AgentExtensionAutomationContext,
+	type AgentResult,
+	type AgentRuntimeEvent,
+	type BasicLogger,
+	DEFAULT_API_TIMEOUT_MS,
+	DEFAULT_MAX_PARALLEL_TOOL_CALLS,
 } from "@cline/shared";
 import { setClineDir, setHomeDir } from "@cline/shared/storage";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -290,6 +292,90 @@ describe("LocalRuntimeHost", () => {
 				leadAgentId: "agent-root-1",
 				restoredFromPersistence: false,
 				distinct_id: distinctId,
+			}),
+		);
+	});
+
+	it("defaults local sessions to parallel tool calls while preserving explicit sequential override", async () => {
+		const defaultSessionId = "sess-parallel-default";
+		const sequentialSessionId = "sess-parallel-sequential";
+		const sessionService = {
+			ensureSessionsDir: vi.fn().mockReturnValue("/tmp/sessions"),
+			createRootSessionWithArtifacts: vi
+				.fn()
+				.mockResolvedValueOnce({
+					manifestPath: "/tmp/manifest-default.json",
+					messagesPath: "/tmp/messages-default.json",
+					manifest: createManifest(defaultSessionId),
+				})
+				.mockResolvedValueOnce({
+					manifestPath: "/tmp/manifest-sequential.json",
+					messagesPath: "/tmp/messages-sequential.json",
+					manifest: createManifest(sequentialSessionId),
+				}),
+			persistSessionMessages: vi.fn(),
+			writeSessionManifest: vi.fn(),
+			listSessions: vi.fn().mockResolvedValue([]),
+			deleteSession: vi.fn().mockResolvedValue({ deleted: true }),
+		};
+		const runtimeBuilder = {
+			build: vi.fn().mockReturnValue({ tools: [], shutdown: vi.fn() }),
+		};
+		const agent = {
+			run: vi.fn().mockResolvedValue(createResult()),
+			continue: vi.fn().mockResolvedValue(createResult()),
+			getMessages: vi.fn().mockReturnValue([]),
+			getAgentId: vi.fn().mockReturnValue("agent-root-1"),
+			getConversationId: vi.fn().mockReturnValue("conv-root-1"),
+			abort: vi.fn(),
+			subscribeEvents: vi.fn().mockReturnValue(() => {}),
+			canStartRun: vi.fn().mockReturnValue(true),
+			shutdown: vi.fn().mockResolvedValue(undefined),
+		};
+		const createAgent = vi.fn(() => agent as never);
+		const manager = new RuntimeHostUnderTest({
+			distinctId,
+			sessionService: sessionService as never,
+			runtimeBuilder: runtimeBuilder as never,
+			createAgent,
+		});
+
+		await manager.startSession(
+			normalizeStartInput({
+				config: createConfig({ sessionId: defaultSessionId }),
+				prompt: "hello",
+			}),
+		);
+		await manager.startSession(
+			normalizeStartInput({
+				config: createConfig({
+					sessionId: sequentialSessionId,
+					apiTimeoutMs: 60_000,
+					maxParallelToolCalls: 1,
+					maxTokensPerTurn: 4096,
+					thinking: true,
+					thinkingBudgetTokens: 1024,
+				}),
+				prompt: "hello",
+			}),
+		);
+
+		expect(createAgent).toHaveBeenNthCalledWith(
+			1,
+			expect.objectContaining({
+				apiTimeoutMs: DEFAULT_API_TIMEOUT_MS,
+				hookErrorMode: "ignore",
+				maxParallelToolCalls: DEFAULT_MAX_PARALLEL_TOOL_CALLS,
+			}),
+		);
+		expect(createAgent).toHaveBeenNthCalledWith(
+			2,
+			expect.objectContaining({
+				apiTimeoutMs: 60_000,
+				maxParallelToolCalls: 1,
+				maxTokensPerTurn: 4096,
+				thinking: true,
+				thinkingBudgetTokens: 1024,
 			}),
 		);
 	});

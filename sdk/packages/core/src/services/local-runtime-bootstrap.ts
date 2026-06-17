@@ -95,11 +95,13 @@ function resolveReasoningSettings(
 ): ProviderSettings["reasoning"] {
 	const hasThinking = typeof config.thinking === "boolean";
 	const hasEffort = typeof config.reasoningEffort === "string";
-	if (!hasThinking && !hasEffort) return storedReasoning;
+	const hasBudget = typeof config.thinkingBudgetTokens === "number";
+	if (!hasThinking && !hasEffort && !hasBudget) return storedReasoning;
 	return {
 		...(storedReasoning ?? {}),
 		...(hasThinking ? { enabled: config.thinking } : {}),
 		...(hasEffort ? { effort: config.reasoningEffort } : {}),
+		...(hasBudget ? { budgetTokens: config.thinkingBudgetTokens } : {}),
 	};
 }
 

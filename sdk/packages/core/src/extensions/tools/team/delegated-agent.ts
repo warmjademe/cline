@@ -1,13 +1,15 @@
-import type {
-	AgentConfig,
-	AgentEvent,
-	AgentHooks,
-	AgentTool,
-	BasicLogger,
-	HookErrorMode,
-	ITelemetryService,
-	ToolApprovalRequest,
-	ToolApprovalResult,
+import {
+	type AgentConfig,
+	type AgentEvent,
+	type AgentHooks,
+	type AgentTool,
+	type BasicLogger,
+	DEFAULT_API_TIMEOUT_MS,
+	DEFAULT_MAX_PARALLEL_TOOL_CALLS,
+	type HookErrorMode,
+	type ITelemetryService,
+	type ToolApprovalRequest,
+	type ToolApprovalResult,
 } from "@cline/shared";
 import { SessionRuntime } from "../../../runtime/orchestration/session-runtime-orchestrator";
 import {
@@ -27,6 +29,10 @@ export type DelegatedAgentConnectionConfig = Pick<
 	| "providerConfig"
 	| "knownModels"
 	| "thinking"
+	| "thinkingBudgetTokens"
+	| "reasoningEffort"
+	| "maxTokensPerTurn"
+	| "apiTimeoutMs"
 >;
 
 export interface DelegatedAgentRuntimeConfig
@@ -36,6 +42,7 @@ export interface DelegatedAgentRuntimeConfig
 	clinePlatform?: string;
 	clineIdeName?: string;
 	maxIterations?: number;
+	maxParallelToolCalls?: number;
 	hooks?: AgentHooks;
 	extensions?: AgentExtension[];
 	logger?: BasicLogger;
@@ -87,6 +94,10 @@ export function createDelegatedAgentConfigProvider(
 			providerConfig: runtimeConfig.providerConfig,
 			knownModels: runtimeConfig.knownModels,
 			thinking: runtimeConfig.thinking,
+			thinkingBudgetTokens: runtimeConfig.thinkingBudgetTokens,
+			reasoningEffort: runtimeConfig.reasoningEffort,
+			maxTokensPerTurn: runtimeConfig.maxTokensPerTurn,
+			apiTimeoutMs: runtimeConfig.apiTimeoutMs,
 		}),
 		updateConnectionDefaults: (overrides) => {
 			runtimeConfig = {
@@ -111,12 +122,15 @@ export function buildDelegatedAgentConfig(
 		systemPrompt,
 		tools: options.tools,
 		maxIterations: options.maxIterations ?? runtimeConfig.maxIterations,
+		maxParallelToolCalls:
+			runtimeConfig.maxParallelToolCalls ?? DEFAULT_MAX_PARALLEL_TOOL_CALLS,
+		apiTimeoutMs: runtimeConfig.apiTimeoutMs ?? DEFAULT_API_TIMEOUT_MS,
 		parentAgentId: options.parentAgentId,
 		abortSignal: options.abortSignal,
 		onEvent: options.onEvent,
 		hooks: runtimeConfig.hooks,
 		extensions: runtimeConfig.extensions,
-		hookErrorMode: options.hookErrorMode,
+		hookErrorMode: options.hookErrorMode ?? "ignore",
 		toolPolicies: options.toolPolicies,
 		requestToolApproval: options.requestToolApproval,
 		logger: runtimeConfig.logger,
