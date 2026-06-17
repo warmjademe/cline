@@ -32,7 +32,6 @@ export type DelegatedAgentConnectionConfig = Pick<
 	| "thinkingBudgetTokens"
 	| "reasoningEffort"
 	| "maxTokensPerTurn"
-	| "apiTimeoutMs"
 >;
 
 export interface DelegatedAgentRuntimeConfig
@@ -43,6 +42,7 @@ export interface DelegatedAgentRuntimeConfig
 	clineIdeName?: string;
 	maxIterations?: number;
 	maxParallelToolCalls?: number;
+	apiTimeoutMs?: number;
 	hooks?: AgentHooks;
 	extensions?: AgentExtension[];
 	logger?: BasicLogger;
@@ -97,7 +97,6 @@ export function createDelegatedAgentConfigProvider(
 			thinkingBudgetTokens: runtimeConfig.thinkingBudgetTokens,
 			reasoningEffort: runtimeConfig.reasoningEffort,
 			maxTokensPerTurn: runtimeConfig.maxTokensPerTurn,
-			apiTimeoutMs: runtimeConfig.apiTimeoutMs,
 		}),
 		updateConnectionDefaults: (overrides) => {
 			runtimeConfig = {

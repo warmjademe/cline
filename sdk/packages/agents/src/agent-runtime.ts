@@ -1068,8 +1068,9 @@ export class AgentRuntime {
 		}
 
 		if (this.config.toolExecution === "parallel") {
-			return Promise.all(
-				prepared.map((execution) => this.executePreparedTool(execution)),
+			return this.executePreparedToolsWithLimit(
+				prepared,
+				this.config.maxParallelToolCalls,
 			);
 		}
 
@@ -1077,6 +1078,35 @@ export class AgentRuntime {
 		for (const execution of prepared) {
 			results.push(await this.executePreparedTool(execution));
 		}
+		return results;
+	}
+
+	private async executePreparedToolsWithLimit(
+		prepared: PreparedToolExecution[],
+		maxParallelToolCalls: number | undefined,
+	): Promise<AgentMessage[]> {
+		const limit =
+			typeof maxParallelToolCalls === "number" &&
+			Number.isFinite(maxParallelToolCalls)
+				? Math.max(1, Math.floor(maxParallelToolCalls))
+				: prepared.length;
+		const results = new Array<AgentMessage>(prepared.length);
+		let nextIndex = 0;
+
+		const worker = async (): Promise<void> => {
+			for (;;) {
+				const index = nextIndex;
+				nextIndex += 1;
+				if (index >= prepared.length) {
+					return;
+				}
+				results[index] = await this.executePreparedTool(prepared[index]);
+			}
+		};
+
+		await Promise.all(
+			Array.from({ length: Math.min(limit, prepared.length) }, () => worker()),
+		);
 		return results;
 	}
 

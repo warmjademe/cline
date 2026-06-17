@@ -1325,6 +1325,94 @@ describe("AgentRuntime", () => {
 		expect(toolMessages[1]?.content[0]).toMatchObject({ toolName: "fast" });
 	});
 
+	it("limits concurrent parallel tool execution when maxParallelToolCalls is set", async () => {
+		let active = 0;
+		let maxActive = 0;
+		const starts: string[] = [];
+		const completions: string[] = [];
+		const releaseQueue: Array<() => void> = [];
+		const createBlockingTool = (name: string): AgentTool => ({
+			name,
+			description: `${name} tool`,
+			inputSchema: { type: "object" },
+			async execute() {
+				starts.push(name);
+				active += 1;
+				maxActive = Math.max(maxActive, active);
+				await new Promise<void>((resolve) => {
+					releaseQueue.push(resolve);
+				});
+				active -= 1;
+				completions.push(name);
+				return { name };
+			},
+		});
+		const model = new ScriptedModel([
+			() => [
+				{
+					type: "tool-call-delta",
+					toolCallId: "one_call",
+					toolName: "one",
+					inputText: "{}",
+				},
+				{
+					type: "tool-call-delta",
+					toolCallId: "two_call",
+					toolName: "two",
+					inputText: "{}",
+				},
+				{
+					type: "tool-call-delta",
+					toolCallId: "three_call",
+					toolName: "three",
+					inputText: "{}",
+				},
+				{ type: "finish", reason: "tool-calls" },
+			],
+			() => [
+				{ type: "text-delta", text: "done" },
+				{ type: "finish", reason: "stop" },
+			],
+		]);
+		const runtime = new AgentRuntime({
+			model,
+			tools: [
+				createBlockingTool("one"),
+				createBlockingTool("two"),
+				createBlockingTool("three"),
+			],
+			toolExecution: "parallel",
+			maxParallelToolCalls: 2,
+		});
+
+		const runPromise = runtime.run("Limited parallel");
+		await vi.waitFor(() => {
+			expect(starts).toEqual(["one", "two"]);
+		});
+		expect(maxActive).toBe(2);
+		releaseQueue.shift()?.();
+		await vi.waitFor(() => {
+			expect(starts).toEqual(["one", "two", "three"]);
+		});
+		expect(maxActive).toBe(2);
+		for (const release of releaseQueue.splice(0)) {
+			release();
+		}
+
+		const result = await runPromise;
+
+		expect(result.status).toBe("completed");
+		expect(completions).toEqual(["one", "two", "three"]);
+		const toolMessages = result.messages.filter(
+			(message) => message.role === "tool",
+		);
+		expect(toolMessages.map((message) => message.content[0])).toEqual([
+			expect.objectContaining({ toolName: "one" }),
+			expect.objectContaining({ toolName: "two" }),
+			expect.objectContaining({ toolName: "three" }),
+		]);
+	});
+
 	it("captures events, logger calls, telemetry, and failed tool runs", async () => {
 		const telemetry = {
 			capture: vi.fn(),

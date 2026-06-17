@@ -111,6 +111,7 @@ export function createAgentRuntimeConfig(
 		completionPolicy: agentConfig.completionPolicy,
 		maxIterations: agentConfig.maxIterations,
 		toolExecution,
+		maxParallelToolCalls: agentConfig.maxParallelToolCalls,
 		toolPolicies: agentConfig.toolPolicies,
 		toolContextMetadata: input.toolContextMetadata,
 		requestToolApproval: agentConfig.requestToolApproval,

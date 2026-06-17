@@ -429,6 +429,11 @@ export interface AgentRuntimeConfig {
 		completionGuard?: () => string | undefined;
 	};
 	toolExecution?: "sequential" | "parallel";
+	/**
+	 * Maximum number of tool calls to execute concurrently in a single model turn.
+	 * Only applies when `toolExecution` is `"parallel"`.
+	 */
+	maxParallelToolCalls?: number;
 	toolPolicies?: Record<string, ToolPolicy>;
 	toolContextMetadata?: Record<string, unknown>;
 	requestToolApproval?: (

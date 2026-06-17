@@ -176,6 +176,7 @@ describe("createAgentRuntimeConfig", () => {
 		expect(runtimeConfig.tools).toBe(tools);
 		expect(runtimeConfig.maxIterations).toBe(7);
 		expect(runtimeConfig.toolExecution).toBe("parallel");
+		expect(runtimeConfig.maxParallelToolCalls).toBe(4);
 		expect(runtimeConfig.completionPolicy).toEqual({
 			requireCompletionTool: true,
 		});
