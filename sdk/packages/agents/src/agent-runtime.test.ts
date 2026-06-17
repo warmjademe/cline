@@ -1325,6 +1325,82 @@ describe("AgentRuntime", () => {
 		expect(toolMessages[1]?.content[0]).toMatchObject({ toolName: "fast" });
 	});
 
+	it("requests approvals in assistant order before parallel execution", async () => {
+		const approvalOrder: string[] = [];
+		const executionOrder: string[] = [];
+		const createApprovedTool = (name: string): AgentTool => ({
+			name,
+			description: `${name} tool`,
+			inputSchema: { type: "object" },
+			async execute() {
+				executionOrder.push(name);
+				return { name };
+			},
+		});
+		const requestToolApproval = vi.fn(async (request) => {
+			approvalOrder.push(request.toolCallId);
+			return { approved: true };
+		});
+		const model = new ScriptedModel([
+			() => [
+				{
+					type: "tool-call-delta",
+					toolCallId: "first_call",
+					toolName: "first",
+					inputText: "{}",
+				},
+				{
+					type: "tool-call-delta",
+					toolCallId: "second_call",
+					toolName: "second",
+					inputText: "{}",
+				},
+				{
+					type: "tool-call-delta",
+					toolCallId: "third_call",
+					toolName: "third",
+					inputText: "{}",
+				},
+				{ type: "finish", reason: "tool-calls" },
+			],
+			() => [
+				{ type: "text-delta", text: "done" },
+				{ type: "finish", reason: "stop" },
+			],
+		]);
+		const runtime = new AgentRuntime({
+			model,
+			tools: [
+				createApprovedTool("first"),
+				createApprovedTool("second"),
+				createApprovedTool("third"),
+			],
+			toolExecution: "parallel",
+			toolPolicies: { "*": { autoApprove: false } },
+			requestToolApproval,
+		});
+
+		const result = await runtime.run("Approved parallel");
+
+		expect(result.status).toBe("completed");
+		expect(approvalOrder).toEqual(["first_call", "second_call", "third_call"]);
+		expect(requestToolApproval.mock.calls.map(([request]) => request)).toEqual([
+			expect.objectContaining({
+				toolCallId: "first_call",
+				toolName: "first",
+			}),
+			expect.objectContaining({
+				toolCallId: "second_call",
+				toolName: "second",
+			}),
+			expect.objectContaining({
+				toolCallId: "third_call",
+				toolName: "third",
+			}),
+		]);
+		expect(executionOrder).toEqual(["first", "second", "third"]);
+	});
+
 	it("limits concurrent parallel tool execution when maxParallelToolCalls is set", async () => {
 		let active = 0;
 		let maxActive = 0;
